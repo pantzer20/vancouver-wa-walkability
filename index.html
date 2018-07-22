@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <title>GEOG 574 Final Project</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="author" content="Tree Casiano, Seth Frazier, Johnathon Pantzlaff">
+
+    <link rel="stylesheet" href="leaflet/leaflet.css">
+    <link rel="stylesheet" href="main.css">
+    <link href='https://fonts.googleapis.com/css?family=Montserrat' rel='stylesheet' type='text/css'>
+
+    <script src="leaflet/leaflet.js"></script>
+    <script src="blocks.js"></script>
+
+</head>
+<body>
+    <header class="header">Walkability and Income in Vancouver</header>
+
+    <div id="map" style="position:relative; height:100%; width:100%;">
+        <div class="leaflet-control-layers leaflet-bottom leaflet-left legend"><strong>LEGEND</strong>
+            <br>
+            <span id="legend-label" class="legend-label">General Walkability Score</span>
+            <div class="color-ramp"></div>
+            <p style="float:left" id="legend-min">min</p>
+            <p style="float:right" id="legend-max">max</p>
+        </div>
+    </div>
+
+
+<script>
+var map = L.map('map', {
+    renderer: L.canvas(),
+    minZoom: 11,
+    maxZoom: 20,
+    maxBounds: ([
+        [45.4, -122.8],
+        [45.9, -122.2]
+    ]),
+    maxBoundsViscosity: 1
+});
+
+var legendMin = document.getElementById('legend-min');
+var legendMax = document.getElementById('legend-max');
+var legendLabel = document.getElementById('legend-label');
+
+
+map.setView([45.66, -122.54], 12);
+
+
+// set base layer
+var osmLayer = L.tileLayer('http://tile.stamen.com/terrain/{z}/{x}/{y}.jpg', {
+    attribution: 'Basemap: <a href="http://stamen.com">Stamen Design</a> <a href="https://creativecommons.org/licenses/by/3.0">(CC-BY 3.0)</a>, <a href="https://openstreetmap.org">OpenStreetMap</a> <a href="https://www.openstreetmap.org/copyright">(ODbL)</a>'
+});
+map.addLayer(osmLayer);
+
+var incomeArray = [];
+var generalArray = [];
+var outdoorArray = [];
+
+(function populateIncomeArray() {
+    for (i in blocks.features) {
+        incomeArray.push(blocks.features[i].properties.income);
+    }
+    incomeArray = incomeArray.sort((a,b)=>a-b);
+})();
+
+(function populateGeneralArray() {
+    for (i in blocks.features) {
+        generalArray.push(blocks.features[i].properties.general_score);
+    }
+    generalArray = generalArray.sort((a,b)=>a-b);
+})();
+
+(function populateOutdoorArray() {
+    for (i in blocks.features) {
+        outdoorArray.push(blocks.features[i].properties.park_score);
+    }
+    outdoorArray = outdoorArray.sort((a,b)=>a-b);
+})();
+
+
+// set default text
+legendMin.innerHTML = (generalArray[0]).toFixed(0);
+legendMax.innerHTML = (generalArray[generalArray.length - 1]).toFixed(0);
+
+
+var generalLayer = L.geoJSON(blocks, {
+    attribution: 'Blocks: <a href="https://census.gov">US Census Bureau</a>',
+    onEachFeature: function(feature,layer) {
+        var f = feature.properties;
+        var intensity = (Math.abs((f.general_score / 2.75) - 255)).toFixed(0);
+        layer.setStyle(setFeatureStyle(intensity));
+        layer.bindPopup(setPopupText(f))
+    }
+});
+map.addLayer(generalLayer);
+
+var outdoorLayer = L.geoJSON(blocks, {
+    attribution: 'Blocks: <a href="https://census.gov">US Census Bureau</a>',
+    onEachFeature: function(feature,layer) {
+        var f = feature.properties;
+        var intensity = (Math.abs((f.park_score / 0.83) - 255)).toFixed(0);
+        layer.setStyle(setFeatureStyle(intensity));
+        layer.bindPopup(setPopupText(f));
+    }
+});
+
+var incomeLayer = L.geoJSON(blocks, {
+    attribution: 'Blocks and Income: <a href="https://census.gov">US Census Bureau</a>',
+    onEachFeature: function(feature,layer) {
+        var f = feature.properties;
+        var intensity = (Math.abs((f.income / 541) - 255)).toFixed(0);
+        layer.setStyle(setFeatureStyle(intensity));
+        layer.bindPopup(setPopupText(f));
+    }
+});
+
+var overlays = {
+    'General Walkability': generalLayer,
+    'Outdoor Recreation Walkability': outdoorLayer,
+    'Median Income': incomeLayer
+};
+
+
+// event listeners
+map.on('baselayerchange', function(e) {
+    if (e.name === "General Walkability") {
+        legendMin.innerHTML = (generalArray[0]).toFixed(0);
+        legendMax.innerHTML = (generalArray[generalArray.length - 1]).toFixed(0);
+        legendLabel.innerHTML = "General Walkability Score";
+    } else if (e.name === "Outdoor Recreation Walkability") {
+        legendMin.innerHTML = (outdoorArray[0]).toFixed(0);
+        legendMax.innerHTML = (outdoorArray[outdoorArray.length - 1]).toFixed(0);
+        legendLabel.innerHTML = "Outdoor Recreation Walkability";
+    } else if (e.name === "Median Income"){
+        legendMin.innerHTML = '$' + (incomeArray[0]).toLocaleString();
+        legendMax.innerHTML = '$' + (incomeArray[incomeArray.length - 1]).toLocaleString();
+        legendLabel.innerHTML = "Median Income";
+    }
+});
+
+// helper functions
+function setPopupText(f) {
+    var incomePct = (((incomeArray.indexOf(f.income)) / incomeArray.length) * 100).toFixed(1);
+    var generalPct = (((generalArray.indexOf(f.general_score)) / generalArray.length) * 100).toFixed(1);
+    var outdoorPct = (((outdoorArray.indexOf(f.park_score)) / outdoorArray.length) * 100).toFixed(1);
+    return '<p class="figure">$' + (f.income).toLocaleString() + '</p>' +
+        '<p class="note">Median Income</p>' +
+        '<p class="percentile">Higher than ' + incomePct + '% of all incomes</p>' +
+        '<p class="figure">' + generalPct + '</p>' +
+        '<p class="note">General Walkability Percentile</p>' +
+        '<p class="percentile">Raw scores</p>' +
+        '<p class="percentile" style="width:50%; float:left"><b>' + (f.general_score).toFixed(1) + '</b><br>This block</p>' +
+        '<p class="percentile" style="width:50%; float:right"><b>' + (generalArray[generalArray.length - 1]).toFixed(1) + '</b><br>Best block</p>' +
+        '<p class="figure">' + outdoorPct + '</p>' +
+        '<p class="note">Outdoor Recreation Percentile</p>' +
+        '<p class="percentile">Raw scores</p>' +
+        '<p class="percentile" style="width:50%; float:left"><b>' + (f.park_score).toFixed(1) + '</b><br>This block</p>' +
+        '<p class="percentile" style="width:50%; float:right"><b>' + (outdoorArray[outdoorArray.length - 1]).toFixed(1) + '</b><br>Best block</p>' +
+        '<p style="margin:0; line-height:0.1em">&emsp;</p>';
+}
+
+function setFeatureStyle(intensity) {
+    return {
+        stroke: false,
+        fillColor: 'rgb(' + intensity + ',' + intensity + ', 255)',
+        fillOpacity: 0.6
+    };
+}
+
+
+L.control.layers(overlays, {}, {collapsed: false}).addTo(map);
+</script>
+</body>
+</html>
